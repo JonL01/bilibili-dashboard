@@ -390,6 +390,8 @@ def generate_insights():
             context = season_text
         elif usable(part_text) and part_text != title:
             context = part_text
+        else:
+            context = title
 
         if context:
             llm = _llm_summary(title, context)
