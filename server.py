@@ -16,6 +16,46 @@ BILI_HEADERS = {
     "Referer": "https://www.bilibili.com/",
 }
 
+_llm_cache = {}
+def _llm_summary(title, desc):
+    key = f"{title}|{desc[:60]}"
+    if key in _llm_cache:
+        return _llm_cache[key]
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        return ""
+    prompt = (
+        f"根据标题和简介，用一句话概括这个B站视频的内容（不超过50字）：\n"
+        f"标题：{title}\n简介：{desc}"
+    )
+    body = json.dumps({
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": "你是一个B站视频内容总结助手。用一句话概括视频内容，简洁明了，不超过50字，不要加引号或前缀标注。"},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": 80,
+        "temperature": 0.3,
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode())
+            text = result["choices"][0]["message"]["content"].strip().strip('"').strip("'")
+            if text:
+                _llm_cache[key] = text
+                return text
+    except Exception as e:
+        sys.stderr.write(f"[LLM] {e}\n")
+    return ""
+
 def fetch_bilibili(path):
     url = f"{BILI_BASE}{path}"
     req = urllib.request.Request(url, headers=BILI_HEADERS)
@@ -299,27 +339,35 @@ def generate_insights():
         })
 
     def fetch_summary(v):
-        real = ""
+        title = v["title"]
+        desc_text = ""
+        part_text = ""
         try:
             data = fetch_bilibili(f"/view?aid={v['aid']}")
             if data.get("code") == 0:
                 d = data["data"]
                 pages = d.get("pages", [])
-                part = pages[0].get("part", "") if pages else ""
-                desc = d.get("desc", "").strip()
-                if desc and desc != v["title"]:
-                    real = desc[:200]
-                elif part and part != v["title"]:
-                    real = part[:200]
+                part_text = pages[0].get("part", "") if pages else ""
+                desc_text = d.get("desc", "").strip()
         except:
             pass
-        if not real:
-            dur = v.get("duration", 0)
-            mins, secs = dur // 60, dur % 60
-            dur_str = f"{mins}分{secs}秒" if mins else f"{secs}秒"
-            cat = v.get("tname", "热门")
-            real = f"【{cat}】{dur_str} · {_fmt(v['view'])}播放 {_fmt(v['like'])}点赞 {_fmt(v['coin'])}投币"
-        return (v["aid"], real)
+
+        context = desc_text or part_text or ""
+        if context:
+            llm = _llm_summary(title, context)
+            if llm:
+                return (v["aid"], llm)
+
+        if desc_text and desc_text != title:
+            return (v["aid"], desc_text[:200])
+        if part_text and part_text != title:
+            return (v["aid"], part_text[:200])
+
+        dur = v.get("duration", 0)
+        mins, secs = dur // 60, dur % 60
+        dur_str = f"{mins}分{secs}秒" if mins else f"{secs}秒"
+        cat = v.get("tname", "热门")
+        return (v["aid"], f"【{cat}】{dur_str} · {_fmt(v['view'])}播放 {_fmt(v['like'])}点赞 {_fmt(v['coin'])}投币")
 
     with ThreadPoolExecutor(max_workers=10) as pool:
         futs = {pool.submit(fetch_summary, v): v for v in hot_insights}
