@@ -261,16 +261,18 @@ def generate_insights():
             return None
 
         selected = perspectives[:3]
+        tag_options = {"🔥 情绪共鸣型", "📚 干货收藏型", "💬 深度讨论型", "🤝 群体共鸣型", "⚡ 趋势预判型", "📊 数据洞察型"}
         prompt = (
             f"为这个B站视频生成{len(selected)}个解读视角。\n\n"
             f"标题：{title}\n内容摘要：{summary}\n"
             f"数据：点赞率{like_rate}%，投币率{coin_rate}%，收藏率{fav_rate}%，分享率{share_rate}%，评论率{reply_rate}%\n\n"
-            f"视角要求：\n"
         )
         for p in selected:
             prompt += f"- {p}\n"
         prompt += (
-            "\n每行输出一个视角，格式：视角标签 | 标题 | 正文\n"
+            "\n标签限以下6种，必须原样使用（含emoji）：\n"
+            "🔥 情绪共鸣型 | 📚 干货收藏型 | 💬 深度讨论型 | 🤝 群体共鸣型 | ⚡ 趋势预判型 | 📊 数据洞察型\n\n"
+            "每行输出一个视角，严格格式：标签 | 标题 | 正文\n"
             "示例：\n"
             "🔥 情绪共鸣型 | 被撞飞盲杖破防全网！路人的反应藏着城市最暖的善意 | 聚焦路人的反应，放大善意带来的情感冲击，解释高互动率背后观众对温暖的认可。\n"
             "要求：标题像新闻标题，引用视频中的具体细节；正文1-2句，不超过60字。"
@@ -288,6 +290,8 @@ def generate_insights():
 
         global _llm_attempts, _llm_errors, _llm_last_error
         for attempt in range(retry + 1):
+            import random as _r; _r.random()
+            time.sleep(_r.uniform(0.3, 0.8))
             req = urllib.request.Request(
                 "https://api.groq.com/openai/v1/chat/completions",
                 data=body,
@@ -301,13 +305,20 @@ def generate_insights():
                 _llm_attempts += 1
                 with urllib.request.urlopen(req, timeout=20) as resp:
                     text = json.loads(resp.read().decode())["choices"][0]["message"]["content"].strip()
+                valid_tags = {"🔥 情绪共鸣型", "📚 干货收藏型", "💬 深度讨论型", "🤝 群体共鸣型", "⚡ 趋势预判型", "📊 数据洞察型"}
                 parsed = []
                 for line in text.split("\n"):
                     line = line.strip().lstrip("- ")
                     if "|" in line:
                         parts = [p.strip() for p in line.split("|", 2)]
                         if len(parts) >= 3:
-                            parsed.append({"tag": parts[0], "title": parts[1], "summary": parts[2]})
+                            tag = parts[0]
+                            if tag not in valid_tags:
+                                for vt in valid_tags:
+                                    if any(w in tag for w in vt.split()):
+                                        tag = vt
+                                        break
+                            parsed.append({"tag": tag, "title": parts[1], "summary": parts[2]})
                 if parsed:
                     _llm_cache[key] = parsed
                     return parsed
@@ -515,7 +526,9 @@ def generate_insights():
                     v["summary"] = summary[:200]
                     break
 
+    import random as _random
     def generate_video_angles(v):
+        _random.random()  # import guard
         llm_angles = _llm_angles(
             v["title"], v.get("summary", ""),
             v["like_rate"], v["coin_rate"], v["fav_rate"],
@@ -529,7 +542,7 @@ def generate_insights():
                 v["fav_rate"], v["reply_rate"], v["danmaku_rate"],
             )
 
-    with ThreadPoolExecutor(max_workers=5) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(generate_video_angles, [h for h in hot_insights if h.get("summary")]))
     for v in hot_insights:
         if "angles" not in v:
