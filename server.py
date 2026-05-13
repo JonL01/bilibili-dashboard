@@ -280,7 +280,7 @@ def generate_insights():
         global _llm_attempts, _llm_errors, _llm_last_error
         for attempt in range(retry + 1):
             import random as _r; _r.random()
-            time.sleep(_r.uniform(0.7, 1.5))
+            time.sleep(_r.uniform(0.3, 0.6))
             req = urllib.request.Request(
                 "https://api.groq.com/openai/v1/chat/completions",
                 data=body,
@@ -515,21 +515,24 @@ def generate_insights():
                     v["summary"] = summary[:200]
                     break
 
-    for h in hot_insights:
-        if not h.get("summary"):
-            continue
-        llm_angles = _llm_angles(
-            h["title"], h.get("summary", ""),
-            h["like_rate"], h["coin_rate"], h["fav_rate"],
-            h["share_rate"], h["reply_rate"],
-        )
-        if llm_angles:
-            h["angles"] = llm_angles[:3]
-        else:
-            h["angles"] = generate_angles(
-                h, h["like_rate"], h["coin_rate"], h["share_rate"],
-                h["fav_rate"], h["reply_rate"], h["danmaku_rate"],
+    import threading as _th
+    _angle_lock = _th.Semaphore(3)
+    def generate_video_angles(v):
+        with _angle_lock:
+            llm_angles = _llm_angles(
+                v["title"], v.get("summary", ""),
+                v["like_rate"], v["coin_rate"], v["fav_rate"],
+                v["share_rate"], v["reply_rate"],
             )
+        if llm_angles:
+            v["angles"] = llm_angles[:3]
+        else:
+            v["angles"] = generate_angles(
+                v, v["like_rate"], v["coin_rate"], v["share_rate"],
+                v["fav_rate"], v["reply_rate"], v["danmaku_rate"],
+            )
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        pool.map(generate_video_angles, [h for h in hot_insights if h.get("summary")])
     for v in hot_insights:
         if "angles" not in v:
             v["angles"] = generate_angles(
