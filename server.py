@@ -6,6 +6,7 @@ import os
 import time
 import sys
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 PORT = int(os.environ.get("PORT", 8080))
 BILI_BASE = "https://api.bilibili.com/x/web-interface"
@@ -296,6 +297,28 @@ def generate_insights():
             "link": v["link"],
             **ins,
         })
+
+    def fetch_summary(v):
+        try:
+            data = fetch_bilibili(f"/view?aid={v['aid']}")
+            if data.get("code") == 0:
+                d = data["data"]
+                pages = d.get("pages", [])
+                part = pages[0].get("part", "") if pages else ""
+                desc = d.get("desc", "")
+                return (v["aid"], part or desc)
+        except:
+            pass
+        return (v["aid"], "")
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futs = {pool.submit(fetch_summary, v): v for v in hot_insights}
+        for fut in as_completed(futs):
+            aid, summary = fut.result()
+            for v in hot_insights:
+                if v["aid"] == aid:
+                    v["summary"] = summary[:200]
+                    break
 
     cat_stats = {}
     for v in parsed:

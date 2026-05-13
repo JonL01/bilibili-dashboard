@@ -658,6 +658,7 @@ function renderInsights(data) {
             <span class="stat">📣 分享率 <span class="val">${v.share_rate}%</span></span>
             <span class="stat">⭐ 收藏率 <span class="val">${v.fav_rate}%</span></span>
           </div>
+          ${v.summary ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:6px;border-left:2px solid rgba(251,114,153,0.3);font-size:12px;color:#aaa;line-height:1.5;"><span style="color:#fb7299;font-weight:600;">📝 内容概要</span> ${v.summary.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
           <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">
             ${v.tags.map(t => `<span class="tag tag-soar">${t}</span>`).join('')}
           </div>
