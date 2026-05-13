@@ -17,12 +17,14 @@ BILI_HEADERS = {
 }
 
 _llm_cache = {}
-def _llm_summary(title, desc):
+def _llm_summary(title, desc, retry=1):
     key = f"{title}|{desc[:60]}"
     if key in _llm_cache:
         return _llm_cache[key]
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
+        return ""
+    if len(desc) < 3:
         return ""
     prompt = (
         f"根据标题和简介，用一句话概括这个B站视频的内容（不超过50字）：\n"
@@ -37,23 +39,29 @@ def _llm_summary(title, desc):
         "max_tokens": 80,
         "temperature": 0.3,
     }).encode()
-    req = urllib.request.Request(
-        "https://api.groq.com/openai/v1/chat/completions",
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read().decode())
-            text = result["choices"][0]["message"]["content"].strip().strip('"').strip("'")
-            if text:
-                _llm_cache[key] = text
-                return text
-    except Exception as e:
-        sys.stderr.write(f"[LLM] {e}\n")
+    for attempt in range(retry + 1):
+        req = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                result = json.loads(resp.read().decode())
+                text = result["choices"][0]["message"]["content"].strip().strip('"').strip("'")
+                if text:
+                    _llm_cache[key] = text
+                    return text
+        except Exception as e:
+            status = getattr(e, "code", 0)
+            if attempt < retry and status in (429, 503):
+                time.sleep(1)
+                continue
+            sys.stderr.write(f"[LLM] {title[:20]}… {e}\n")
+            break
     return ""
 
 def fetch_bilibili(path):
@@ -338,6 +346,10 @@ def generate_insights():
             **ins,
         })
 
+    def usable(t):
+        t = t.strip()
+        return len(t) > 3 and not all(c in "-—~.。,，!！?？… " for c in t)
+
     def fetch_summary(v):
         title = v["title"]
         desc_text = ""
@@ -352,15 +364,20 @@ def generate_insights():
         except:
             pass
 
-        context = desc_text or part_text or ""
+        context = ""
+        if usable(desc_text) and desc_text != title:
+            context = desc_text
+        elif usable(part_text) and part_text != title:
+            context = part_text
+
         if context:
             llm = _llm_summary(title, context)
             if llm:
                 return (v["aid"], llm)
 
-        if desc_text and desc_text != title:
+        if usable(desc_text) and desc_text != title:
             return (v["aid"], desc_text[:200])
-        if part_text and part_text != title:
+        if usable(part_text) and part_text != title:
             return (v["aid"], part_text[:200])
 
         dur = v.get("duration", 0)
