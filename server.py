@@ -270,15 +270,16 @@ def generate_insights():
         for p in selected:
             prompt += f"- {p}\n"
         prompt += (
-            "\n以JSON数组格式输出，每个元素包含tag（含emoji的视角标签）、title（像新闻标题，引用视频中的具体细节）、summary（1-2句正文，不超过60字）。\n"
-            '示例：[{"tag":"🔥 情绪共鸣型","title":"被撞飞盲杖破防全网！路人的反应藏着城市最暖的善意","summary":"聚焦路人的反应，放大善意带来的情感冲击，解释高互动率背后观众对温暖的认可。"}]\n'
-            "只输出JSON数组，不要其他内容。"
+            "\n每行输出一个视角，格式：视角标签 | 标题 | 正文\n"
+            "示例：\n"
+            "🔥 情绪共鸣型 | 被撞飞盲杖破防全网！路人的反应藏着城市最暖的善意 | 聚焦路人的反应，放大善意带来的情感冲击，解释高互动率背后观众对温暖的认可。\n"
+            "要求：标题像新闻标题，引用视频中的具体细节；正文1-2句，不超过60字。"
         )
 
         body = json.dumps({
             "model": "llama-3.1-8b-instant",
             "messages": [
-                {"role": "system", "content": "你是一个B站热点分析师。输出结构化JSON数组，每个元素含tag/title/summary。"},
+                {"role": "system", "content": "你是一个B站热点分析师。每行输出：标签 | 标题 | 正文"},
                 {"role": "user", "content": prompt},
             ],
             "max_tokens": 400,
@@ -300,8 +301,14 @@ def generate_insights():
                 _llm_attempts += 1
                 with urllib.request.urlopen(req, timeout=20) as resp:
                     text = json.loads(resp.read().decode())["choices"][0]["message"]["content"].strip()
-                parsed = json.loads(text)
-                if isinstance(parsed, list) and all("tag" in a and "title" in a and "summary" in a for a in parsed):
+                parsed = []
+                for line in text.split("\n"):
+                    line = line.strip()
+                    if "|" in line:
+                        parts = [p.strip() for p in line.split("|", 2)]
+                        if len(parts) >= 3:
+                            parsed.append({"tag": parts[0], "title": parts[1], "summary": parts[2]})
+                if parsed:
                     _llm_cache[key] = parsed
                     return parsed
             except Exception as e:
