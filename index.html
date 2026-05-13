@@ -548,11 +548,18 @@ function updateStats(data) {
 }
 
 async function refresh() {
-  const loading = document.getElementById('loading');
+  let loading = document.getElementById('loading');
   const content = document.getElementById('content');
   const statusText = document.getElementById('status-text');
   const refreshBtn = document.querySelector('.header-right button');
 
+  if (!loading) {
+    loading = document.createElement('div');
+    loading.className = 'loading';
+    loading.id = 'loading';
+    loading.innerHTML = '<div class="spinner"></div><div>正在抓取 B站 综合热门数据（3页150条）...</div>';
+    content.parentNode.insertBefore(loading, content);
+  }
   loading.style.display = 'block';
   content.innerHTML = '';
   statusText.textContent = '加载中...';
@@ -569,9 +576,7 @@ async function refresh() {
 
     updateStats(currentData);
 
-    // Build tab content containers
     const tabs = ['hot', 'soaring', 'new', 'distribution'];
-    const tabNames = ['热排行', '飙升趋势', '新热速递', '分区分布'];
     let html = '';
     tabs.forEach(id => {
       html += `<div class="tab-content ${id === 'hot' ? 'active' : ''}" id="tab-${id}"></div>`;
