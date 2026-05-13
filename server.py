@@ -239,6 +239,82 @@ def generate_insights():
             return f"{n/10000:.1f}万"
         return str(n)
 
+    def _llm_angles(title, summary, like_rate, coin_rate, fav_rate, share_rate, reply_rate, retry=1):
+        key = f"angles|{title}|{summary[:60]}"
+        if key in _llm_cache:
+            return _llm_cache[key]
+        api_key = os.environ.get("GROQ_API_KEY", "").strip()
+        if not api_key or not summary:
+            return None
+
+        perspectives = []
+        if like_rate > 8 and coin_rate > 10:
+            perspectives.append("暖心共鸣视角（🔥 情绪共鸣型）：高点赞+高投币触发，聚焦情感冲击")
+        if fav_rate > 5:
+            perspectives.append("权益科普视角（📚 干货收藏型）：高收藏触发，聚焦实用知识与行动建议")
+        if reply_rate > 0.5 or share_rate > 0.8:
+            perspectives.append("城市观察视角（💬 深度讨论型）：高讨论触发，聚焦社会议题与理性讨论")
+        if share_rate > 0.8 or like_rate > 10:
+            perspectives.append("群体共情视角（🤝 群体共鸣型）：高分享/高互动触发，聚焦共情与自我投射")
+
+        if not perspectives:
+            return None
+
+        selected = perspectives[:3]
+        prompt = (
+            f"为这个B站视频生成{len(selected)}个解读视角。\n\n"
+            f"标题：{title}\n内容摘要：{summary}\n"
+            f"数据：点赞率{like_rate}%，投币率{coin_rate}%，收藏率{fav_rate}%，分享率{share_rate}%，评论率{reply_rate}%\n\n"
+            f"视角要求：\n"
+        )
+        for p in selected:
+            prompt += f"- {p}\n"
+        prompt += (
+            "\n以JSON数组格式输出，每个元素包含tag（含emoji的视角标签）、title（像新闻标题，引用视频中的具体细节）、summary（1-2句正文，不超过60字）。\n"
+            '示例：[{"tag":"🔥 情绪共鸣型","title":"被撞飞盲杖破防全网！路人的反应藏着城市最暖的善意","summary":"聚焦路人的反应，放大善意带来的情感冲击，解释高互动率背后观众对温暖的认可。"}]\n'
+            "只输出JSON数组，不要其他内容。"
+        )
+
+        body = json.dumps({
+            "model": "llama-3.1-8b-instant",
+            "messages": [
+                {"role": "system", "content": "你是一个B站热点分析师。输出结构化JSON数组，每个元素含tag/title/summary。"},
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": 400,
+            "temperature": 0.4,
+        }).encode()
+
+        global _llm_attempts, _llm_errors, _llm_last_error
+        for attempt in range(retry + 1):
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/chat/completions",
+                data=body,
+                headers={
+                    "Authorization": f"Bearer {api_key.strip()}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "BilibiliDashboard/1.0",
+                },
+            )
+            try:
+                _llm_attempts += 1
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    text = json.loads(resp.read().decode())["choices"][0]["message"]["content"].strip()
+                parsed = json.loads(text)
+                if isinstance(parsed, list) and all("tag" in a and "title" in a and "summary" in a for a in parsed):
+                    _llm_cache[key] = parsed
+                    return parsed
+            except Exception as e:
+                _llm_errors += 1
+                _llm_last_error = str(e)[:200]
+                status = getattr(e, "code", 0)
+                if attempt < retry and status in (429, 503):
+                    time.sleep(1)
+                    continue
+                sys.stderr.write(f"[LLM] angles {title[:20]}… {e}\n")
+                break
+        return None
+
     def generate_angles(v, like_rate, coin_rate, share_rate, fav_rate, reply_rate, danmaku_rate):
         title = v["title"]
         topic = _topic(title)
@@ -247,49 +323,47 @@ def generate_insights():
         angles = []
 
         if coin_rate > 10:
-            angles.append(
-                f"📚 专业分析型 — {topic}：为什么能拿到{coin_rate}%的高投币率？\n"
-                f"基于内容的信息密度与实用价值，从用户决策心理的角度，"
-                f"拆解观众主动投币推荐的深层动机与内容价值锚点。"
-            )
+            angles.append({
+                "tag": "🔥 情绪共鸣型",
+                "title": f"{topic}为什么能拿到{coin_rate}%的高投币率？",
+                "summary": f"基于内容的信息密度与实用价值，从用户决策心理的角度，拆解观众主动投币推荐的深层动机与内容价值锚点。"
+            })
 
         if like_rate > 8 or share_rate > 0.8:
             anchor = f"{like_rate}%点赞率" if like_rate > 8 else f"{share_rate}%分享率"
-            angles.append(
-                f"🔥 大众热议型 — {topic}！观众为什么疯狂互动？\n"
-                f"聚焦内容触发情感共鸣的关键帧与叙事节奏，"
-                f"拆解这些设计为什么能让观众产生强烈互动意愿，"
-                f"还原大家对{topic}的真实讨论与情绪投射。"
-            )
+            angles.append({
+                "tag": "🔥 情绪共鸣型",
+                "title": f"{topic}！观众为什么疯狂互动？",
+                "summary": f"聚焦内容触发情感共鸣的关键帧与叙事节奏，拆解这些设计为什么能让观众产生强烈互动意愿，还原大家对{topic}的真实讨论与情绪投射。"
+            })
 
         if reply_rate > 0.3 or danmaku_rate > 0.3:
-            angles.append(
-                f"🎬 现场纪实型 — 评论区都在热议！{topic}\n"
-                f"汇总评论区里观众的真实反馈与讨论焦点，"
-                f"还原大家对{topic}的第一反应与情感连接，"
-                f"补充更多普通人的真实视角与经历。"
-            )
+            angles.append({
+                "tag": "💬 深度讨论型",
+                "title": f"评论区都在热议！{topic}",
+                "summary": f"汇总评论区里观众的真实反馈与讨论焦点，还原大家对{topic}的第一反应与情感连接，补充更多普通人的真实视角与经历。"
+            })
 
         if age_hours < 12 and view > 100000:
-            angles.append(
-                f"⚡ 趋势预判型 — {topic}：新晋爆款潜力分析\n"
-                f"基于内容发布{int(age_hours)}小时即获得{_fmt(view)}播放的表现，"
-                f"从选题时机与受众匹配度的维度，预判其破圈潜力与持续传播能力。"
-            )
+            angles.append({
+                "tag": "⚡ 趋势预判型",
+                "title": f"{topic}：新晋爆款潜力分析",
+                "summary": f"基于内容发布{int(age_hours)}小时即获得{_fmt(view)}播放的表现，从选题时机与受众匹配度的维度，预判其破圈潜力与持续传播能力。"
+            })
 
         if len(angles) < 3 and (like_rate > 5 or view > 300000):
-            angles.append(
-                f"📊 数据洞察型 — {topic}：互动数据深度解读\n"
-                f"综合分析{_fmt(view)}播放与{like_rate}%点赞率的数据组合，"
-                f"解读内容在不同受众群体中的表现差异与传播路径特征。"
-            )
+            angles.append({
+                "tag": "📊 数据洞察型",
+                "title": f"{topic}：互动数据深度解读",
+                "summary": f"综合分析{_fmt(view)}播放与{like_rate}%点赞率的数据组合，解读内容在不同受众群体中的表现差异与传播路径特征。"
+            })
 
         if not angles:
-            angles.append(
-                f"📌 基础观察型 — {topic}：高热内容特征分析\n"
-                f"作为综合热门内容，在选题方向与内容质量上具备参考价值，"
-                f"建议关注同类内容的创作模式与受众偏好特征。"
-            )
+            angles.append({
+                "tag": "📌 基础观察型",
+                "title": f"{topic}：高热内容特征分析",
+                "summary": f"作为综合热门内容，在选题方向与内容质量上具备参考价值，建议关注同类内容的创作模式与受众偏好特征。"
+            })
 
         return angles[:3]
 
@@ -324,8 +398,6 @@ def generate_insights():
         elif v["duration"] < 600: tags.append("中视频")
         else: tags.append("长视频")
 
-        angles = generate_angles(v, like_rate, coin_rate, share_rate, fav_rate, reply_rate, danmaku_rate)
-
         return {
             "hot_score": hot_score,
             "engagement_score": engagement_score,
@@ -336,7 +408,6 @@ def generate_insights():
             "reply_rate": reply_rate,
             "danmaku_rate": danmaku_rate,
             "tags": tags,
-            "angles": angles,
         }
 
     hot_insights = []
@@ -423,6 +494,29 @@ def generate_insights():
                 if v["aid"] == aid:
                     v["summary"] = summary[:200]
                     break
+
+    def generate_video_angles(v):
+        llm_angles = _llm_angles(
+            v["title"], v.get("summary", ""),
+            v["like_rate"], v["coin_rate"], v["fav_rate"],
+            v["share_rate"], v["reply_rate"],
+        )
+        if llm_angles:
+            v["angles"] = llm_angles[:3]
+        else:
+            v["angles"] = generate_angles(
+                v, v["like_rate"], v["coin_rate"], v["share_rate"],
+                v["fav_rate"], v["reply_rate"], v["danmaku_rate"],
+            )
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        list(pool.map(generate_video_angles, [h for h in hot_insights if h.get("summary")]))
+    for v in hot_insights:
+        if "angles" not in v:
+            v["angles"] = generate_angles(
+                v, v["like_rate"], v["coin_rate"], v["share_rate"],
+                v["fav_rate"], v["reply_rate"], v["danmaku_rate"],
+            )
 
     cat_stats = {}
     for v in parsed:
