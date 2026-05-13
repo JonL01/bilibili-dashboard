@@ -299,17 +299,22 @@ def generate_insights():
         })
 
     def fetch_summary(v):
+        real = ""
         try:
             data = fetch_bilibili(f"/view?aid={v['aid']}")
             if data.get("code") == 0:
                 d = data["data"]
                 pages = d.get("pages", [])
                 part = pages[0].get("part", "") if pages else ""
-                desc = d.get("desc", "")
-                return (v["aid"], part or desc)
+                desc = d.get("desc", "").strip()
+                raw = (part or desc).strip()
+                if raw and raw != v["title"]:
+                    real = raw[:200]
         except:
             pass
-        return (v["aid"], "")
+        if not real:
+            real = f"📊 {_fmt(v['view'])}播放 · {_fmt(v['like'])}点赞 · {_fmt(v['coin'])}投币 · {_fmt(v['favorite'])}收藏"
+        return (v["aid"], real)
 
     with ThreadPoolExecutor(max_workers=10) as pool:
         futs = {pool.submit(fetch_summary, v): v for v in hot_insights}
