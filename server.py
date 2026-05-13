@@ -29,10 +29,16 @@ def _llm_summary(title, desc, retry=1):
         return ""
     if len(desc) < 3:
         return ""
-    prompt = (
-        f"根据标题和简介，用一句话概括这个B站视频的内容（不超过50字）：\n"
-        f"标题：{title}\n简介：{desc}"
-    )
+    if desc == title:
+        prompt = (
+            f"根据标题，猜测这个B站视频可能是什么内容（不超过50字）：\n"
+            f"标题：{title}"
+        )
+    else:
+        prompt = (
+            f"根据标题和简介，用一句话概括这个B站视频的内容（不超过50字）：\n"
+            f"标题：{title}\n简介：{desc}"
+        )
     body = json.dumps({
         "model": "llama-3.1-8b-instant",
         "messages": [
