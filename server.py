@@ -434,6 +434,10 @@ def generate_insights():
         "cat_insights": cat_insights,
         "time_distribution": [{"bucket": k, "count": v} for k, v in time_buckets.items()],
         "total_analyzed": len(parsed),
+        "_debug": {
+            "groq_key_set": bool(os.environ.get("GROQ_API_KEY", "")),
+            "llm_cache_size": len(_llm_cache),
+        },
     }
 
 
