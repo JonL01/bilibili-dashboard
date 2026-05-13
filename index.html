@@ -503,12 +503,6 @@ function showView(tabId, viewMode='card') {
   if (tabId === 'distribution' && currentData.distribution.length) {
     setTimeout(() => renderChart(currentData.distribution), 100);
   }
-
-  el.innerHTML = html;
-
-  if (tabId === 'distribution' && currentData.distribution.length) {
-    setTimeout(() => renderChart(currentData.distribution), 100);
-  }
 }
 
 function renderChart(dist) {
