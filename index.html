@@ -314,6 +314,7 @@ body {
   <div class="tab" data-tab="soaring">📈 飙升趋势 <span class="badge" id="soar-badge">0</span></div>
   <div class="tab" data-tab="new">🆕 新热速递</div>
   <div class="tab" data-tab="distribution">📊 分区分布</div>
+  <div class="tab" data-tab="insights">🧠 热点解读</div>
 </div>
 
 <div class="content" id="content">
@@ -483,6 +484,24 @@ function showView(tabId, viewMode='card') {
     }
   } else if (tabId === 'distribution') {
     html = renderDistribution(currentData.distribution);
+  } else if (tabId === 'insights') {
+    if (!insightsData) {
+      html = '<div class="loading" style="display:block;"><div class="spinner"></div><div>正在生成热点解读...</div></div>';
+      fetchInsights().then(d => {
+        const el = document.getElementById('tab-insights');
+        if (el) el.innerHTML = renderInsights(d);
+      }).catch(e => {
+        const el = document.getElementById('tab-insights');
+        if (el) el.innerHTML = `<div class="error-msg"><div class="icon">⚠️</div><div>加载失败: ${e.message}</div></div>`;
+      });
+    } else {
+      html = renderInsights(insightsData);
+    }
+  }
+  if (html) el.innerHTML = html;
+
+  if (tabId === 'distribution' && currentData.distribution.length) {
+    setTimeout(() => renderChart(currentData.distribution), 100);
   }
 
   el.innerHTML = html;
@@ -549,6 +568,129 @@ function updateStats(data) {
     t.toLocaleString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
+// ===== 热点解读 =====
+let insightsData = null;
+
+function formatDuration(sec) {
+  if (!sec) return '-';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m > 0 ? `${m}分${s}秒` : `${s}秒`;
+}
+
+function renderInsights(data) {
+  const list = data.hot_insights || [];
+  const cats = data.cat_insights || [];
+  const timeDist = data.time_distribution || [];
+
+  let html = '<div style="margin-bottom:16px;">';
+
+  // Summary cards
+  const avgEng = list.length ? list.reduce((s, v) => s + v.engagement_score, 0) / list.length : 0;
+  const avgLike = list.length ? list.reduce((s, v) => s + v.like_rate, 0) / list.length : 0;
+
+  html += `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+    <div class="stat-item" style="background:rgba(251,114,153,0.1);padding:12px 18px;border-radius:10px;border:1px solid rgba(251,114,153,0.2);">
+      📊 分析视频 <span class="num">${data.total_analyzed}</span> 条
+    </div>
+    <div class="stat-item" style="background:rgba(0,161,214,0.1);padding:12px 18px;border-radius:10px;border:1px solid rgba(0,161,214,0.2);">
+      💡 平均互动评分 <span class="num">${avgEng.toFixed(1)}</span>
+    </div>
+    <div class="stat-item" style="background:rgba(250,204,21,0.1);padding:12px 18px;border-radius:10px;border:1px solid rgba(250,204,21,0.2);">
+      👍 平均点赞率 <span class="num">${avgLike.toFixed(1)}%</span>
+    </div>
+  </div>`;
+
+  // Time distribution bar
+  html += '<div class="chart-container"><h3>⏰ 热门视频发布时间分布</h3><div style="display:flex;gap:6px;align-items:end;height:120px;padding:10px 0;">';
+  const maxCount = Math.max(...timeDist.map(d => d.count), 1);
+  const colors = ['#f87171','#fb923c','#facc15','#4ade80','#38bdf8','#818cf8','#e879f9'];
+  timeDist.forEach((d, i) => {
+    const h = (d.count / maxCount) * 100;
+    html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;">
+      <div style="font-size:11px;color:#999;margin-bottom:4px;">${d.count}</div>
+      <div style="width:100%;height:${h}px;background:${colors[i]};border-radius:4px 4px 0 0;min-height:4px;transition:height 0.3s;"></div>
+      <div style="font-size:11px;color:#888;margin-top:4px;">${d.bucket}</div>
+    </div>`;
+  });
+  html += '</div></div>';
+
+  // Category insights table
+  html += '<div class="chart-container" style="margin-top:12px;"><h3>📂 分区热点洞察</h3>';
+  html += '<table class="data-table"><thead><tr><th>分区</th><th>视频数</th><th>总播放</th><th>平均点赞率</th><th>投币/点赞比</th><th>运营建议</th></tr></thead><tbody>';
+  cats.slice(0, 12).forEach(c => {
+    let tip = '';
+    if (c.avg_like_rate > 10) tip = '🔥 高互动分区，适合情感/共鸣向内容';
+    else if (c.avg_like_rate > 6) tip = '👍 互动良好，建议保持更新频率';
+    else tip = '📈 竞争激烈，需差异化切入';
+    if (c.avg_coin_rate > 20) tip += '，用户愿意投币推荐';
+    html += `<tr>
+      <td><b>${c.name}</b></td>
+      <td class="num-cell">${c.count}</td>
+      <td class="num-cell">${formatNum(c.total_view)}</td>
+      <td class="num-cell" style="color:${c.avg_like_rate > 8 ? '#4ade80' : '#facc15'}">${c.avg_like_rate}%</td>
+      <td class="num-cell" style="color:${c.avg_coin_rate > 15 ? '#4ade80' : '#facc15'}">${c.avg_coin_rate}%</td>
+      <td style="color:#999;font-size:12px;">${tip}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+
+  // Per-video deep insights
+  html += '<h3 style="margin:20px 0 12px;font-size:16px;">🔍 高热视频多角度解读</h3>';
+  list.forEach((v, i) => {
+    const pub = new Date(v.pubdate * 1000);
+    const timeStr = pub.toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const hotColor = v.hot_score > 5000 ? '#fb7299' : v.hot_score > 2000 ? '#facc15' : '#38bdf8';
+    const engColor = v.engagement_score > 15 ? '#4ade80' : v.engagement_score > 8 ? '#facc15' : '#f87171';
+
+    html += `<div class="video-card" style="margin-bottom:10px;cursor:default;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span class="rank ${getRankClass(i)}" style="flex-shrink:0;">${i+1}</span>
+            <span class="title" style="margin-bottom:0;flex:1;" onclick="window.open('${v.link}','_blank')">${v.title}</span>
+          </div>
+          <div class="meta">
+            <span class="author">👤 ${v.author}</span>
+            <span>🏷️ ${v.tname}</span>
+            <span>⏱ ${timeStr}</span>
+            <span>📐 ${formatDuration(v.duration)}</span>
+          </div>
+          <div class="stats-row" style="margin-top:4px;">
+            <span class="stat">🔥 热度 <span class="val">${v.hot_score}</span></span>
+            <span class="stat">💡 互动评分 <span class="val">${v.engagement_score}</span></span>
+            <span class="stat">👍 点赞率 <span class="val">${v.like_rate}%</span></span>
+            <span class="stat">🪙 投币/赞 <span class="val">${v.coin_rate}%</span></span>
+            <span class="stat">📣 分享率 <span class="val">${v.share_rate}%</span></span>
+            <span class="stat">⭐ 收藏率 <span class="val">${v.fav_rate}%</span></span>
+          </div>
+          <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">
+            ${v.tags.map(t => `<span class="tag tag-soar">${t}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:12px;color:#aaa;margin-bottom:6px;">📌 多角度解读：</div>
+        ${v.angles.map(a => `<div style="font-size:13px;color:#ddd;padding:3px 0;padding-left:12px;border-left:2px solid ${a.includes('🔥')?'#fb7299':a.includes('💰')||a.includes('📚')?'#facc15':a.includes('📣')||a.includes('🔄')?'#4ade80':a.includes('💬')||a.includes('🗣️')?'#38bdf8':a.includes('⭐')?'#818cf8':'#666'};margin-bottom:4px;">${a}</div>`).join('')}
+      </div>
+    </div>`;
+  });
+
+  html += '</div>';
+  return html;
+}
+
+async function fetchInsights() {
+  try {
+    const resp = await fetch('/api/insights');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    insightsData = await resp.json();
+    return insightsData;
+  } catch (e) {
+    throw e;
+  }
+}
+
 async function refresh() {
   let loading = document.getElementById('loading');
   const content = document.getElementById('content');
@@ -571,6 +713,7 @@ async function refresh() {
     const resp = await fetch('/api/analysis');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     currentData = await resp.json();
+    insightsData = null;
 
     loading.style.display = 'none';
     statusText.textContent = '就绪';
