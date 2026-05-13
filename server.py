@@ -157,6 +157,79 @@ def generate_insights():
 
     by_like = sorted(parsed, key=lambda x: -x["like"])
 
+    def _topic(title):
+        t = title
+        for sep in ["【", "(", "（", "[", "{", "！", "?", "？"]:
+            if sep in t:
+                t = t.split(sep)[0]
+        t = t.strip().rstrip("，,、 ")
+        if not t:
+            t = title[:15]
+        if len(t) > 16:
+            t = t[:16] + "…"
+        return t
+
+    def _fmt(n):
+        if n >= 100000000:
+            return f"{n/100000000:.1f}亿"
+        if n >= 10000:
+            return f"{n/10000:.1f}万"
+        return str(n)
+
+    def generate_angles(v, like_rate, coin_rate, share_rate, fav_rate, reply_rate, danmaku_rate):
+        title = v["title"]
+        topic = _topic(title)
+        age_hours = v["age_hours"]
+        view = v["view"]
+        angles = []
+
+        if coin_rate > 10:
+            angles.append(
+                f"📚 专业分析型 — {topic}：为什么能拿到{coin_rate}%的高投币率？\n"
+                f"基于内容的信息密度与实用价值，从用户决策心理的角度，"
+                f"拆解观众主动投币推荐的深层动机与内容价值锚点。"
+            )
+
+        if like_rate > 8 or share_rate > 0.8:
+            anchor = f"{like_rate}%点赞率" if like_rate > 8 else f"{share_rate}%分享率"
+            angles.append(
+                f"🔥 大众热议型 — {topic}！观众为什么疯狂互动？\n"
+                f"聚焦内容触发情感共鸣的关键帧与叙事节奏，"
+                f"拆解这些设计为什么能让观众产生强烈互动意愿，"
+                f"还原大家对{topic}的真实讨论与情绪投射。"
+            )
+
+        if reply_rate > 0.3 or danmaku_rate > 0.3:
+            angles.append(
+                f"🎬 现场纪实型 — 评论区都在热议！{topic}\n"
+                f"汇总评论区里观众的真实反馈与讨论焦点，"
+                f"还原大家对{topic}的第一反应与情感连接，"
+                f"补充更多普通人的真实视角与经历。"
+            )
+
+        if age_hours < 12 and view > 100000:
+            angles.append(
+                f"⚡ 趋势预判型 — {topic}：新晋爆款潜力分析\n"
+                f"基于内容发布{int(age_hours)}小时即获得{_fmt(view)}播放的表现，"
+                f"从选题时机与受众匹配度的维度，预判其破圈潜力与持续传播能力。"
+            )
+
+        if len(angles) < 3 and (like_rate > 5 or view > 300000):
+            angles.append(
+                f"📊 数据洞察型 — {topic}：互动数据深度解读\n"
+                f"综合分析{_fmt(view)}播放与{like_rate}%点赞率的数据组合，"
+                f"解读内容在不同受众群体中的表现差异与传播路径特征。"
+            )
+
+        if not angles:
+            angles.append(
+                f"📌 基础观察型 — {topic}：高热内容特征分析\n"
+                f"作为综合热门内容，在选题方向与内容质量上具备参考价值，"
+                f"建议关注同类内容的创作模式与受众偏好特征。"
+            )
+
+        return angles[:3]
+
     def get_insight(v):
         vv = max(v["view"], 1)
         like_rate = round(v["like"] / vv * 100, 2)
@@ -188,25 +261,7 @@ def generate_insights():
         elif v["duration"] < 600: tags.append("中视频")
         else: tags.append("长视频")
 
-        angle_labels = []
-        if like_rate > 10: angle_labels.append("🔥 情绪共鸣型 — 点赞远超平均，内容引发强烈情感认同")
-        elif like_rate > 5: angle_labels.append("👍 高认可度 — 点赞率高，内容受广泛欢迎")
-
-        if coin_rate > 25: angle_labels.append("💰 干货收藏型 — 投币+收藏率极高，内容有长期价值")
-        elif coin_rate > 10: angle_labels.append("📚 值得推荐 — 投币率高于平均，观众愿意推荐给他人")
-
-        if share_rate > 2: angle_labels.append("📣 社交传播型 — 分享率极高，适合社交平台二次传播")
-        elif share_rate > 0.8: angle_labels.append("🔄 易于传播 — 分享率较高，有破圈潜力")
-
-        if reply_rate > 1: angle_labels.append("💬 话题争议型 — 评论极活跃，适合做话题运营")
-        elif reply_rate > 0.3: angle_labels.append("🗣️ 讨论度高 — 评论活跃，观众参与意愿强")
-
-        if fav_rate > 8: angle_labels.append("⭐ 收藏型内容 — 收藏率极高，用户认为有保存价值")
-        if danmaku_rate > 1: angle_labels.append("🎯 弹幕狂欢型 — 弹幕密度极高，适合实时互动运营")
-        if v["age_hours"] < 12: angle_labels.append("⚡ 极新内容 — 发布时间不足12小时，适合抢先运营")
-
-        if not angle_labels:
-            angle_labels.append("📌 高热基线 — 播放量高但互动特征不明显，建议关注内容差异化")
+        angles = generate_angles(v, like_rate, coin_rate, share_rate, fav_rate, reply_rate, danmaku_rate)
 
         return {
             "hot_score": hot_score,
@@ -218,7 +273,7 @@ def generate_insights():
             "reply_rate": reply_rate,
             "danmaku_rate": danmaku_rate,
             "tags": tags,
-            "angles": angle_labels[:4],
+            "angles": angles,
         }
 
     hot_insights = []

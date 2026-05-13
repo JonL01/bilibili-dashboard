@@ -665,7 +665,16 @@ function renderInsights(data) {
       </div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">
         <div style="font-size:12px;color:#aaa;margin-bottom:6px;">📌 多角度解读：</div>
-        ${v.angles.map(a => `<div style="font-size:13px;color:#ddd;padding:3px 0;padding-left:12px;border-left:2px solid ${a.includes('🔥')?'#fb7299':a.includes('💰')||a.includes('📚')?'#facc15':a.includes('📣')||a.includes('🔄')?'#4ade80':a.includes('💬')||a.includes('🗣️')?'#38bdf8':a.includes('⭐')?'#818cf8':'#666'};margin-bottom:4px;">${a}</div>`).join('')}
+        ${v.angles.map(a => {
+          const lines = a.split('\n');
+          const titleLine = lines[0] || '';
+          const bodyLine = lines.slice(1).join('<br>');
+          const borderColor = titleLine.includes('🔥')?'#fb7299':titleLine.includes('💰')||titleLine.includes('📚')?'#facc15':titleLine.includes('📣')||titleLine.includes('🔄')?'#4ade80':titleLine.includes('💬')||titleLine.includes('🗣️')?'#38bdf8':titleLine.includes('⭐')||titleLine.includes('📊')?'#818cf8':titleLine.includes('⚡')?'#f97316':'#666';
+          return `<div style="padding:3px 0 3px 12px;border-left:2px solid ${borderColor};margin-bottom:6px;">
+            <div style="font-size:13px;color:#eee;font-weight:500;">${titleLine}</div>
+            ${bodyLine ? `<div style="font-size:12px;color:#999;margin-top:2px;line-height:1.5;">${bodyLine}</div>` : ''}
+          </div>`;
+        }).join('')}
       </div>
     </div>`;
   });
