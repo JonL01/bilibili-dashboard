@@ -715,7 +715,7 @@ async function refresh() {
 
     updateStats(currentData);
 
-    const tabs = ['hot', 'soaring', 'new', 'distribution'];
+    const tabs = ['hot', 'soaring', 'new', 'distribution', 'insights'];
     let html = '';
     tabs.forEach(id => {
       html += `<div class="tab-content ${id === 'hot' ? 'active' : ''}" id="tab-${id}"></div>`;
