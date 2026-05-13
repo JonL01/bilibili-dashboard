@@ -24,7 +24,7 @@ def _llm_summary(title, desc, retry=1):
     key = f"{title}|{desc[:60]}"
     if key in _llm_cache:
         return _llm_cache[key]
-    api_key = os.environ.get("GROQ_API_KEY", "")
+    api_key = os.environ.get("GROQ_API_KEY", "").strip()
     if not api_key:
         return ""
     if len(desc) < 3:
@@ -48,8 +48,9 @@ def _llm_summary(title, desc, retry=1):
             "https://api.groq.com/openai/v1/chat/completions",
             data=body,
             headers={
-                "Authorization": f"Bearer {api_key}",
+                "Authorization": f"Bearer {api_key.strip()}",
                 "Content-Type": "application/json",
+                "User-Agent": "BilibiliDashboard/1.0",
             },
         )
         try:
