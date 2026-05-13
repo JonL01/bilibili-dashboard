@@ -307,13 +307,18 @@ def generate_insights():
                 pages = d.get("pages", [])
                 part = pages[0].get("part", "") if pages else ""
                 desc = d.get("desc", "").strip()
-                raw = (part or desc).strip()
-                if raw and raw != v["title"]:
-                    real = raw[:200]
+                if desc and desc != v["title"]:
+                    real = desc[:200]
+                elif part and part != v["title"]:
+                    real = part[:200]
         except:
             pass
         if not real:
-            real = f"📊 {_fmt(v['view'])}播放 · {_fmt(v['like'])}点赞 · {_fmt(v['coin'])}投币 · {_fmt(v['favorite'])}收藏"
+            dur = v.get("duration", 0)
+            mins, secs = dur // 60, dur % 60
+            dur_str = f"{mins}分{secs}秒" if mins else f"{secs}秒"
+            cat = v.get("tname", "热门")
+            real = f"【{cat}】{dur_str} · {_fmt(v['view'])}播放 {_fmt(v['like'])}点赞 {_fmt(v['coin'])}投币"
         return (v["aid"], real)
 
     with ThreadPoolExecutor(max_workers=10) as pool:
