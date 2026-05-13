@@ -303,7 +303,7 @@ def generate_insights():
                     text = json.loads(resp.read().decode())["choices"][0]["message"]["content"].strip()
                 parsed = []
                 for line in text.split("\n"):
-                    line = line.strip()
+                    line = line.strip().lstrip("- ")
                     if "|" in line:
                         parts = [p.strip() for p in line.split("|", 2)]
                         if len(parts) >= 3:
@@ -316,7 +316,7 @@ def generate_insights():
                 _llm_last_error = str(e)[:200]
                 status = getattr(e, "code", 0)
                 if attempt < retry and status in (429, 503):
-                    time.sleep(1)
+                    time.sleep((attempt + 1) * 2)
                     continue
                 sys.stderr.write(f"[LLM] angles {title[:20]}… {e}\n")
                 break
@@ -328,37 +328,50 @@ def generate_insights():
         age_hours = v["age_hours"]
         view = v["view"]
         angles = []
+        used_tags = set()
 
-        if coin_rate > 10:
+        if like_rate > 8 and coin_rate > 10:
+            used_tags.add("🔥")
             angles.append({
                 "tag": "🔥 情绪共鸣型",
                 "title": f"{topic}为什么能拿到{coin_rate}%的高投币率？",
                 "summary": f"基于内容的信息密度与实用价值，从用户决策心理的角度，拆解观众主动投币推荐的深层动机与内容价值锚点。"
             })
 
-        if like_rate > 8 or share_rate > 0.8:
-            anchor = f"{like_rate}%点赞率" if like_rate > 8 else f"{share_rate}%分享率"
+        if fav_rate > 5:
+            used_tags.add("📚")
             angles.append({
-                "tag": "🔥 情绪共鸣型",
-                "title": f"{topic}！观众为什么疯狂互动？",
-                "summary": f"聚焦内容触发情感共鸣的关键帧与叙事节奏，拆解这些设计为什么能让观众产生强烈互动意愿，还原大家对{topic}的真实讨论与情绪投射。"
+                "tag": "📚 干货收藏型",
+                "title": f"{topic}：高收藏率的内容价值分析",
+                "summary": f"围绕{fav_rate}%的高收藏率，拆解内容的知识密度与实用价值，分析观众收藏行为的深层动机与内容的结构化优势。"
             })
 
-        if reply_rate > 0.3 or danmaku_rate > 0.3:
+        if reply_rate > 0.5 or share_rate > 0.8:
+            used_tags.add("💬")
             angles.append({
                 "tag": "💬 深度讨论型",
                 "title": f"评论区都在热议！{topic}",
                 "summary": f"汇总评论区里观众的真实反馈与讨论焦点，还原大家对{topic}的第一反应与情感连接，补充更多普通人的真实视角与经历。"
             })
 
-        if age_hours < 12 and view > 100000:
+        if share_rate > 0.8 or like_rate > 10:
+            used_tags.add("🤝")
+            angles.append({
+                "tag": "🤝 群体共鸣型",
+                "title": f"如果我是视频里的那个人——{topic}触发集体共情",
+                "summary": f"从第一人称视角切入，分析{topic}如何激发观众的自我投射与共情，引导评论区分享相似经历与情感共鸣。"
+            })
+
+        if len(angles) < 3 and age_hours < 12 and view > 100000 and "⚡" not in used_tags:
+            used_tags.add("⚡")
             angles.append({
                 "tag": "⚡ 趋势预判型",
                 "title": f"{topic}：新晋爆款潜力分析",
                 "summary": f"基于内容发布{int(age_hours)}小时即获得{_fmt(view)}播放的表现，从选题时机与受众匹配度的维度，预判其破圈潜力与持续传播能力。"
             })
 
-        if len(angles) < 3 and (like_rate > 5 or view > 300000):
+        if len(angles) < 3 and "📊" not in used_tags:
+            used_tags.add("📊")
             angles.append({
                 "tag": "📊 数据洞察型",
                 "title": f"{topic}：互动数据深度解读",
@@ -516,7 +529,7 @@ def generate_insights():
                 v["fav_rate"], v["reply_rate"], v["danmaku_rate"],
             )
 
-    with ThreadPoolExecutor(max_workers=10) as pool:
+    with ThreadPoolExecutor(max_workers=5) as pool:
         list(pool.map(generate_video_angles, [h for h in hot_insights if h.get("summary")]))
     for v in hot_insights:
         if "angles" not in v:
