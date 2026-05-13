@@ -34,7 +34,7 @@ def _llm_summary(title, desc, retry=1):
         f"标题：{title}\n简介：{desc}"
     )
     body = json.dumps({
-        "model": "llama-3.3-70b-versatile",
+        "model": "llama-3.1-8b-instant",
         "messages": [
             {"role": "system", "content": "你是一个B站视频内容总结助手。用一句话概括视频内容，简洁明了，不超过50字，不要加引号或前缀标注。"},
             {"role": "user", "content": prompt},
