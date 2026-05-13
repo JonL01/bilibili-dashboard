@@ -17,6 +17,9 @@ BILI_HEADERS = {
 }
 
 _llm_cache = {}
+_llm_attempts = 0
+_llm_errors = 0
+_llm_last_error = ""
 def _llm_summary(title, desc, retry=1):
     key = f"{title}|{desc[:60]}"
     if key in _llm_cache:
@@ -39,6 +42,7 @@ def _llm_summary(title, desc, retry=1):
         "max_tokens": 80,
         "temperature": 0.3,
     }).encode()
+    global _llm_attempts, _llm_errors, _llm_last_error
     for attempt in range(retry + 1):
         req = urllib.request.Request(
             "https://api.groq.com/openai/v1/chat/completions",
@@ -49,6 +53,7 @@ def _llm_summary(title, desc, retry=1):
             },
         )
         try:
+            _llm_attempts += 1
             with urllib.request.urlopen(req, timeout=15) as resp:
                 result = json.loads(resp.read().decode())
                 text = result["choices"][0]["message"]["content"].strip().strip('"').strip("'")
@@ -56,6 +61,8 @@ def _llm_summary(title, desc, retry=1):
                     _llm_cache[key] = text
                     return text
         except Exception as e:
+            _llm_errors += 1
+            _llm_last_error = str(e)[:200]
             status = getattr(e, "code", 0)
             if attempt < retry and status in (429, 503):
                 time.sleep(1)
@@ -437,6 +444,9 @@ def generate_insights():
         "_debug": {
             "groq_key_set": bool(os.environ.get("GROQ_API_KEY", "")),
             "llm_cache_size": len(_llm_cache),
+            "llm_attempts": _llm_attempts,
+            "llm_errors": _llm_errors,
+            "llm_last_error": _llm_last_error,
         },
     }
 
