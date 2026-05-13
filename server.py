@@ -247,30 +247,19 @@ def generate_insights():
         if not api_key or not summary:
             return None
 
-        perspectives = []
-        if like_rate > 8 and coin_rate > 10:
-            perspectives.append("暖心共鸣视角（🔥 情绪共鸣型）：高点赞+高投币触发，聚焦情感冲击")
-        if fav_rate > 5:
-            perspectives.append("权益科普视角（📚 干货收藏型）：高收藏触发，聚焦实用知识与行动建议")
-        if reply_rate > 0.5 or share_rate > 0.8:
-            perspectives.append("城市观察视角（💬 深度讨论型）：高讨论触发，聚焦社会议题与理性讨论")
-        if share_rate > 0.8 or like_rate > 10:
-            perspectives.append("群体共情视角（🤝 群体共鸣型）：高分享/高互动触发，聚焦共情与自我投射")
-
-        if not perspectives:
-            return None
-
-        selected = perspectives[:3]
         tag_options = {"🔥 情绪共鸣型", "📚 干货收藏型", "💬 深度讨论型", "🤝 群体共鸣型", "⚡ 趋势预判型", "📊 数据洞察型"}
         prompt = (
-            f"为这个B站视频生成{len(selected)}个解读视角。\n\n"
+            f"为这个B站视频生成2-3个解读视角。\n\n"
             f"标题：{title}\n内容摘要：{summary}\n"
             f"数据：点赞率{like_rate}%，投币率{coin_rate}%，收藏率{fav_rate}%，分享率{share_rate}%，评论率{reply_rate}%\n\n"
-        )
-        for p in selected:
-            prompt += f"- {p}\n"
-        prompt += (
-            "\n标签限以下6种，必须原样使用（含emoji）：\n"
+            "根据数据指标选择合适的视角类型：\n"
+            "- 点赞+投币双高→🔥情绪共鸣型(情感价值)\n"
+            "- 收藏率高→📚干货收藏型(实用价值)\n"
+            "- 评论/分享活跃→💬深度讨论型(话题争议)\n"
+            "- 分享高或点赞极高→🤝群体共鸣型(共情投射)\n"
+            "- 新发布且爆发→⚡趋势预判型(爆款潜力)\n"
+            "- 其他情况→📊数据洞察型\n\n"
+            "标签限以下6种，必须原样使用（含emoji）：\n"
             "🔥 情绪共鸣型 | 📚 干货收藏型 | 💬 深度讨论型 | 🤝 群体共鸣型 | ⚡ 趋势预判型 | 📊 数据洞察型\n\n"
             "每行输出一个视角，严格格式：标签 | 标题 | 正文\n"
             "示例：\n"
