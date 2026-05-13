@@ -362,6 +362,7 @@ def generate_insights():
         title = v["title"]
         desc_text = ""
         part_text = ""
+        season_text = ""
         try:
             data = fetch_bilibili(f"/view?aid={v['aid']}")
             if data.get("code") == 0:
@@ -369,12 +370,24 @@ def generate_insights():
                 pages = d.get("pages", [])
                 part_text = pages[0].get("part", "") if pages else ""
                 desc_text = d.get("desc", "").strip()
+                season = d.get("ugc_season") or {}
+                if season:
+                    for sec in season.get("sections", []):
+                        for ep in sec.get("episodes", []):
+                            if ep.get("aid") == v["aid"]:
+                                et = ep.get("title", "").strip()
+                                st = season.get("title", "").strip()
+                                if et and et != title:
+                                    season_text = f"【{st}】{et}" if st and st != et else et
+                                break
         except:
             pass
 
         context = ""
         if usable(desc_text) and desc_text != title:
             context = desc_text
+        elif usable(season_text):
+            context = season_text
         elif usable(part_text) and part_text != title:
             context = part_text
 
