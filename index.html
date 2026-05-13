@@ -544,7 +544,9 @@ function updateStats(data) {
   document.getElementById('soar-badge').textContent = data.soaring.length;
   document.getElementById('new-count').textContent = data.new_hot.length;
   document.getElementById('cat-count').textContent = data.distribution.length;
-  document.getElementById('update-time').textContent = data.fetch_time_str;
+  const t = new Date(data.fetch_time * 1000);
+  document.getElementById('update-time').textContent =
+    t.toLocaleString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 async function refresh() {
